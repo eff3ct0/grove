@@ -237,18 +237,22 @@ in_use() {
     [ -n "$(find "$1" -name node_modules -prune -o -name .git -prune -o -mmin -60 -print -quit)" ]
 }
 
-# "<path>\t<branch>" for every secondary worktree of every repo under the root (empty branch = detached).
+# "<path>\t<branch>" for every secondary worktree of the main checkout $1 (empty branch = detached).
+worktrees_of() {
+  git -C "$1" worktree prune
+  git -C "$1" worktree list --porcelain | awk -v main="$1" '
+    /^worktree / { wt = substr($0, 10); br = "" }
+    /^branch /   { br = substr($0, 19) }
+    /^$/         { if (wt != "" && wt != main) print wt "\t" br; wt = "" }
+    END          { if (wt != "" && wt != main) print wt "\t" br }'
+}
+
+# worktrees_of for every repo under the root.
 all_worktrees() {
   local repo
   for repo in "$root"/*/*/.git; do
     [ -d "$repo" ] || continue
-    repo=$(dirname "$repo")
-    git -C "$repo" worktree prune
-    git -C "$repo" worktree list --porcelain | awk -v main="$repo" '
-      /^worktree / { wt = substr($0, 10); br = "" }
-      /^branch /   { br = substr($0, 19) }
-      /^$/         { if (wt != "" && wt != main) print wt "\t" br; wt = "" }
-      END          { if (wt != "" && wt != main) print wt "\t" br }'
+    worktrees_of "$(dirname "$repo")"
   done
 }
 
@@ -341,6 +345,54 @@ wt_gc() {
   done
 }
 
+cmd_publish() {
+  local owner='' visibility=$default_visibility main name dest flag path branch
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --public) visibility=public ;;
+      --private) visibility=private ;;
+      -*) usage ;;
+      *)
+        [ -z "$owner" ] || usage
+        owner=$1
+        ;;
+    esac
+    shift
+  done
+  [ -n "$owner" ] || usage
+  flag=$(visibility_flag "$visibility")
+  main=$(main_of .)
+  name=$(basename "$main")
+  dest=$root/$owner/$name
+
+  [ "$(dirname "$main")" = "$root/$local_owner" ] || die "publish works on repos under $root/$local_owner"
+  ! has_origin "$main" || die "$main already has an origin"
+  [ ! -e "$dest" ] && [ ! -e "$dest.wt" ] || die "$dest already exists"
+  if gh repo view "$owner/$name" --json nameWithOwner -q .nameWithOwner >/dev/null 2>&1; then
+    die "$owner/$name already exists on GitHub"
+  fi
+  # Moving a directory from under a running process leaves it in a path that no longer exists.
+  local -a worktrees=() branches=()
+  while IFS=$'\t' read -r path branch; do
+    if has_process_in "$path"; then die "$path is in use by a running process"; fi
+    worktrees+=("$path")
+    branches+=("$branch")
+  done < <(worktrees_of "$main")
+
+  (cd "$main" && gh repo create "$owner/$name" "$flag" --source . --remote origin --push >&2)
+  for branch in "${branches[@]}"; do
+    case "$branch" in agent/*) git -C "$main" push --quiet --set-upstream origin "$branch" >&2 ;; esac
+  done
+
+  mkdir -p "$root/$owner"
+  mv "$main" "$dest"
+  if [ -d "$main.wt" ]; then mv "$main.wt" "$dest.wt"; fi
+  if [ ${#worktrees[@]} -gt 0 ]; then
+    git -C "$dest" worktree repair "${worktrees[@]/#"$main.wt"/"$dest.wt"}"
+  fi
+  echo "$dest"
+}
+
 cmd_wt() {
   [ $# -ge 1 ] || usage
   local sub=$1
@@ -360,6 +412,7 @@ shift
 case "$cmd" in
   clone) cmd_clone "$@" ;;
   new) cmd_new "$@" ;;
+  publish) cmd_publish "$@" ;;
   wt) cmd_wt "$@" ;;
   -h | --help | help) usage ;;
   *) usage ;;
