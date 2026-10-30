@@ -43,8 +43,8 @@ load helpers
 
 @test "new -t runs nix flake init from GROVE_TEMPLATES and keeps the template's files" {
   mkdir -p "$T/bin"
-  cat >"$T/bin/nix" <<'STUB'
-#!/usr/bin/env bash
+  echo "#!$BASH" >"$T/bin/nix"
+  cat >>"$T/bin/nix" <<'STUB'
 echo "$*" >"$GH_STUB/nix-args"
 echo "template agents" >AGENTS.md
 echo "{ }" >devenv.nix
