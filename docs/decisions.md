@@ -34,7 +34,8 @@ and `-n` shows what it would do. Being wrong costs someone's work, so every doub
 `grove new <repo>` (no owner) creates a repo with no remote under `<root>/<localOwner>/<repo>`, so trying something
 does not require deciding on a GitHub name or visibility up front. For these repos the worktree rules that depend on a
 remote are relaxed: `new` branches from the local default branch without fetching, `ls` shows `local` instead of a count
-of unpushed commits, `rm` doesn't require anything to be pushed, and `gc` uses "merged into the local default branch".
+of unpushed commits, `rm` doesn't require anything to be pushed (it keeps the branch unless it is merged, since it holds
+the only copy of its commits), and `gc` uses "merged into the local default branch".
 Their only copy is the local disk, which is why the generated agent instructions say so and point to `grove publish`.
 
 ## 6. `publish` moves a local repo to GitHub, all at once or not at all
