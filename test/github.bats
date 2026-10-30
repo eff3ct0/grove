@@ -106,3 +106,80 @@ load helpers
   [ "$status" -ne 0 ]
   [ ! -e "$GH_STUB/repos/acme/proj.git" ]
 }
+
+@test "new <owner>/<repo> uses GitHub's spelling of the owner" {
+  mkdir -p "$GH_STUB/owners"
+  echo Acme >"$GH_STUB/owners/acme"
+  run "$grove" new acme/fresh
+  [ "$status" -eq 0 ]
+  [ "${lines[-1]}" = "$GROVE_ROOT/Acme/fresh" ]
+}
+
+@test "new <owner>/<repo> keeps the local repo when creating it on GitHub fails" {
+  GH_STUB_FAIL_PUSH=1 run "$grove" new acme/fresh
+  [ "$status" -ne 0 ]
+  [ -d "$GROVE_ROOT/acme/fresh/.git" ]
+  [[ "$output" == *"$GROVE_ROOT/acme/fresh"* ]]
+}
+
+@test "publish works when run from inside one of the repo's worktrees" {
+  repo=$(local_repo proj)
+  cd "$repo"
+  wt=$("$grove" wt new agent/feature 2>/dev/null)
+  cd "$wt"
+  run "$grove" publish acme
+  [ "$status" -eq 0 ]
+  [ -d "$GROVE_ROOT/acme/proj.wt/agent-feature" ]
+}
+
+@test "publish refuses when another process is inside the main checkout" {
+  repo=$(local_repo proj)
+  hold_cwd "$repo"
+  cd "$repo"
+  run "$grove" publish acme
+  [ "$status" -ne 0 ]
+  [ -d "$repo" ]
+  [ ! -e "$GH_STUB/repos/acme/proj.git" ]
+}
+
+@test "publish uses GitHub's spelling of the owner" {
+  mkdir -p "$GH_STUB/owners"
+  echo Acme >"$GH_STUB/owners/acme"
+  repo=$(local_repo proj)
+  cd "$repo"
+  run "$grove" publish acme
+  [ "${lines[-1]}" = "$GROVE_ROOT/Acme/proj" ]
+}
+
+@test "publish run again finishes one that stopped after creating the GitHub repo" {
+  repo=$(local_repo proj)
+  cd "$repo"
+  wt=$("$grove" wt new agent/feature 2>/dev/null)
+  commit_in "$wt" feature
+  gh repo create acme/proj --private --source . --remote origin --push >/dev/null
+  run "$grove" publish acme
+  [ "$status" -eq 0 ]
+  [ -d "$GROVE_ROOT/acme/proj.wt/agent-feature" ]
+  git --git-dir="$GH_STUB/repos/acme/proj.git" rev-parse --verify --quiet agent/feature
+}
+
+@test "publish refuses a repo whose origin is some other repo" {
+  repo=$(local_repo proj)
+  git -C "$repo" remote add origin https://github.com/acme/other.git
+  cd "$repo"
+  run "$grove" publish acme
+  [ "$status" -ne 0 ]
+  [ -d "$repo" ]
+}
+
+@test "publish and wt work when GROVE_ROOT goes through a symlink" {
+  ln -s "$GROVE_ROOT" "$T/link"
+  export GROVE_ROOT=$T/link
+  repo=$(local_repo proj)
+  cd "$repo"
+  "$grove" wt new agent/x >/dev/null 2>&1
+  run "$grove" wt ls
+  [ "${#lines[@]}" -eq 1 ]
+  run "$grove" publish acme
+  [ "$status" -eq 0 ]
+}

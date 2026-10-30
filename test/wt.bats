@@ -116,3 +116,27 @@ load helpers
   [ -d "$wt" ]
   [[ "$output" == *"would remove acme/widget.wt/agent-merged"* ]]
 }
+
+@test "wt gc goes on after a worktree git refuses to remove" {
+  repo=$(cloned acme/widget)
+  cd "$repo"
+  locked=$("$grove" wt new agent/a-locked 2>/dev/null)
+  other=$("$grove" wt new agent/b-other 2>/dev/null)
+  git -C "$repo" worktree lock "$locked"
+  age "$locked"; age "$other"
+  run "$grove" wt gc
+  [ "$status" -eq 0 ]
+  [ -d "$locked" ]
+  [ ! -e "$other" ]
+  git -C "$repo" show-ref --verify --quiet refs/heads/agent/a-locked
+}
+
+@test "wt ls and gc -n leave the worktree records of a missing directory alone" {
+  repo=$(cloned acme/widget)
+  cd "$repo"
+  wt=$("$grove" wt new agent/x 2>/dev/null)
+  mv "$wt" "$T/away"
+  "$grove" wt ls
+  "$grove" wt gc -n
+  [ -d "$repo/.git/worktrees/agent-x" ]
+}

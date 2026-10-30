@@ -38,18 +38,26 @@ of unpushed commits, `rm` doesn't require anything to be pushed (it keeps the br
 the only copy of its commits), and `gc` uses "merged into the local default branch".
 Their only copy is the local disk, which is why the generated agent instructions say so and point to `grove publish`.
 
-## 6. `publish` moves a local repo to GitHub, all at once or not at all
+## 6. `publish` checks everything first, and a rerun finishes what a failure left
 
 `grove publish <owner>` creates the GitHub repo from the local one, pushes `main` and every `agent/*` branch that has a
 worktree, moves `<repo>` and `<repo>.wt` from the local owner directory to `<owner>/`, and repairs the worktree links.
-It refuses when the name is already taken on GitHub (no silent merge with an unrelated repo) and when any worktree is in
-use, because moving a directory under a running process leaves it working in a path that no longer exists.
+Before touching anything it refuses when the name is already taken on GitHub (no silent merge with an unrelated repo)
+and when a process has its working directory in the main checkout or any worktree, because moving a directory under a
+running process leaves it working in a path that no longer exists. grove itself and the shell that ran it don't count:
+the shell's directory moves along with the repo.
+
+Creating a repo on GitHub can't be rolled back by a script, so instead of pretending to be atomic, publish is
+resumable: a repo whose `origin` is already `<owner>/<repo>` is one an earlier run created, and running publish again
+pushes and moves what is left.
 
 ## 7. `new` creates on GitHub and refuses existing repos
 
 `grove new <owner>/<repo>` is for repos that don't exist yet. If one does exist, it stops and suggests `grove clone`
 instead of cloning it, because seeding an existing repo with an init commit would be wrong and silently cloning would
-hide a typo. New GitHub repos are private unless `--public` (configurable through `GROVE_DEFAULT_VISIBILITY`): making
+hide a typo. The owner directory uses GitHub's spelling of the owner, as `clone` does, so a later clone finds the same
+path. If creating the repo on GitHub fails, the local repo stays: gh may have created the remote one already, and the
+local one is the copy with the work. New GitHub repos are private unless `--public` (configurable through `GROVE_DEFAULT_VISIBILITY`): making
 something public by accident is not reversible, the opposite mistake is. The initial commit, `chore: init` on `main`, is
 the only direct push to `main` grove ever makes.
 

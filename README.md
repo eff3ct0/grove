@@ -21,7 +21,7 @@ One clone per repo, at a predictable path, with agent work in sibling worktrees.
 | `grove clone <owner>/<repo>\|<url> [-- <git clone flags>]` | Clone to `<root>/<owner>/<repo>` with GitHub's spelling of owner and name; forks get `upstream`. Prints the path; an existing clone is left alone. |
 | `grove new <owner>/<repo> [--public] [-t <template>]` | Create the repo on GitHub (private by default) with an initial commit and push `main`. Refuses repos that already exist. |
 | `grove new <repo> [-t <template>]` | Create a local repo with no remote at `<root>/<local owner>/<repo>`. |
-| `grove publish <owner> [--public]` | From a local repo: create it on GitHub, push `main` and every `agent/*` branch with a worktree, and move the repo and its worktrees to `<root>/<owner>/`. |
+| `grove publish <owner> [--public]` | From a local repo: create it on GitHub, push `main` and every `agent/*` branch with a worktree, and move the repo and its worktrees to `<root>/<owner>/`. Refuses while another process is inside; if it stops part-way, run it again to finish. |
 | `grove wt new <branch> [base]` | Create `<repo>.wt/<branch with / → ->` from the current repo and print the path. Reuses an existing local or `origin` branch. |
 | `grove wt ls` | Every worktree under the root: unpushed commits (or `local`), clean/dirty, merged. |
 | `grove wt rm <path>` | Remove a worktree; refuses uncommitted changes and, with a remote, unpushed commits. |

@@ -5,6 +5,8 @@ set -euo pipefail
 
 root=${GROVE_ROOT:-$HOME/git}
 root=${root%/}
+# git prints resolved paths; compare against the same spelling.
+if [ -d "$root" ]; then root=$(cd "$root" && pwd -P); fi
 local_owner=${GROVE_LOCAL_OWNER:-local}
 default_visibility=${GROVE_DEFAULT_VISIBILITY:-private}
 templates=${GROVE_TEMPLATES:-}
@@ -46,6 +48,11 @@ parse_spec() {
   spec=${spec%/}
   spec=${spec%.git}
   echo "$spec"
+}
+
+# Owner as GitHub spells it (users and organizations alike), or as typed when GitHub doesn't know it.
+canonical_owner() {
+  gh api "users/$1" -q .login 2>/dev/null || echo "$1"
 }
 
 cmd_clone() {
@@ -149,6 +156,7 @@ cmd_new() {
   fi
 
   spec=$(parse_spec "$spec")
+  spec=$(canonical_owner "${spec%%/*}")/${spec#*/}
   local flag
   flag=$(visibility_flag "$visibility")
   if gh repo view "$spec" --json nameWithOwner -q .nameWithOwner >/dev/null 2>&1; then
@@ -158,9 +166,11 @@ cmd_new() {
   [ ! -e "$dest" ] || die "$dest already exists"
   trap 'rm -rf "$dest"' EXIT
   init_repo "$dest" "${spec#*/}" "$template"
-  # The only direct push to main grove makes.
-  (cd "$dest" && gh repo create "$spec" "$flag" --source . --remote origin --push >&2)
   trap - EXIT
+  # The only direct push to main grove makes. gh may have created the repo before failing, so the local one stays.
+  if ! (cd "$dest" && gh repo create "$spec" "$flag" --source . --remote origin --push >&2); then
+    die "creating $spec on GitHub failed; the local repo is at $dest. Check GitHub, then push it or remove both."
+  fi
   echo "$dest"
 }
 
@@ -184,13 +194,16 @@ has_origin() {
   git -C "$1" config remote.origin.url >/dev/null 2>&1
 }
 
+# Dirty, or git can't tell: a doubt keeps the worktree.
 is_dirty() {
-  [ -n "$(git -C "$1" status --porcelain 2>/dev/null)" ]
+  local out
+  out=$(git -C "$1" status --porcelain 2>/dev/null) || return 0
+  [ -n "$out" ]
 }
 
-# Commits of HEAD that are on no remote.
+# Commits of HEAD that are on no remote, or ? when git can't tell.
 unpushed() {
-  git -C "$1" rev-list --count HEAD --not --remotes 2>/dev/null || echo 0
+  git -C "$1" rev-list --count HEAD --not --remotes 2>/dev/null || echo '?'
 }
 
 # <owner>/<repo> of a GitHub remote URL, or nothing.
@@ -221,14 +234,26 @@ is_merged() {
   return 1
 }
 
-# A process has its working directory inside $1.
+# A process has its working directory inside $1, other than the pids listed in $2.
 has_process_in() {
-  local dir=$1 p cwd
+  local dir=$1 skip=" ${2:-} " p pid cwd
   for p in /proc/[0-9]*/cwd; do
+    pid=${p#/proc/}
+    pid=${pid%/cwd}
+    case "$skip" in *" $pid "*) continue ;; esac
     cwd=$(readlink "$p" 2>/dev/null) || continue
     case "$cwd/" in "$dir"/*) return 0 ;; esac
   done
   return 1
+}
+
+# grove's pid and those of the processes that started it, such as the caller's shell.
+ancestors() {
+  local pid=$$
+  while [ "$pid" -gt 1 ] && [ -r "/proc/$pid/stat" ]; do
+    printf '%s ' "$pid"
+    pid=$(sed -E 's/^.*\) . ([0-9]+) .*$/\1/' "/proc/$pid/stat")
+  done
 }
 
 # In use: a process inside, or a file changed in the last hour.
@@ -237,23 +262,31 @@ in_use() {
     [ -n "$(find "$1" -name node_modules -prune -o -name .git -prune -o -mmin -60 -print -quit)" ]
 }
 
-# "<path>\t<branch>" for every secondary worktree of the main checkout $1 (empty branch = detached).
+# "<path>\t<branch>" for every secondary worktree of the main checkout $1 whose directory exists
+# (empty branch = detached).
 worktrees_of() {
-  git -C "$1" worktree prune
+  local path branch
   git -C "$1" worktree list --porcelain | awk -v main="$1" '
     /^worktree / { wt = substr($0, 10); br = "" }
     /^branch /   { br = substr($0, 19) }
     /^$/         { if (wt != "" && wt != main) print wt "\t" br; wt = "" }
-    END          { if (wt != "" && wt != main) print wt "\t" br }'
+    END          { if (wt != "" && wt != main) print wt "\t" br }' |
+    while IFS=$'\t' read -r path branch; do
+      if [ -d "$path" ]; then printf '%s\t%s\n' "$path" "$branch"; fi
+    done
+}
+
+repos() {
+  local repo
+  for repo in "$root"/*/*/.git; do
+    if [ -d "$repo" ]; then dirname "$repo"; fi
+  done
 }
 
 # worktrees_of for every repo under the root.
 all_worktrees() {
   local repo
-  for repo in "$root"/*/*/.git; do
-    [ -d "$repo" ] || continue
-    worktrees_of "$(dirname "$repo")"
-  done
+  repos | while read -r repo; do worktrees_of "$repo"; done
 }
 
 remove_worktree() {
@@ -261,7 +294,7 @@ remove_worktree() {
   main=$(main_of "$wt")
   # Without a remote, an unmerged branch is the only copy of its commits.
   if [ -n "$branch" ] && ! has_origin "$wt" && ! is_merged "$wt" "$branch"; then keep=1; fi
-  git -C "$main" worktree remove "$wt"
+  git -C "$main" worktree remove "$wt" || return 1
   if [ -n "$keep" ]; then
     echo "kept branch $branch: not merged" >&2
   elif [ -n "$branch" ]; then
@@ -318,29 +351,34 @@ wt_rm() {
   path=$(realpath "$1")
   branch=$(git -C "$path" symbolic-ref --short -q HEAD || true)
   if is_dirty "$path"; then die "$path has uncommitted changes"; fi
-  if has_origin "$path" && [ "$(unpushed "$path")" -gt 0 ]; then die "$path has unpushed commits"; fi
-  remove_worktree "$path" "$branch"
+  if has_origin "$path" && [ "$(unpushed "$path")" != 0 ]; then die "$path has unpushed commits"; fi
+  remove_worktree "$path" "$branch" || die "git could not remove $path"
 }
 
 wt_gc() {
-  local dry='' path branch rel
-  if [ "${1:-}" = -n ]; then dry=1; fi
+  local dry='' path branch rel repo
+  if [ "${1:-}" = -n ]; then
+    dry=1
+  else
+    # Forget worktrees whose directory is gone; a dry run changes nothing.
+    repos | while read -r repo; do git -C "$repo" worktree prune; done
+  fi
   all_worktrees | while IFS=$'\t' read -r path branch; do
     rel=${path#"$root"/}
     if [ -z "$branch" ]; then
       echo "keeping $rel: detached" >&2
     elif is_dirty "$path"; then
       echo "keeping $rel: uncommitted changes" >&2
-    elif has_origin "$path" && [ "$(unpushed "$path")" -gt 0 ]; then
+    elif has_origin "$path" && [ "$(unpushed "$path")" != 0 ]; then
       echo "keeping $rel: unpushed commits" >&2
-    elif ! is_merged "$path" "$branch"; then
-      echo "keeping $rel: branch not merged" >&2
     elif in_use "$path"; then
       echo "keeping $rel: in use or changed in the last hour" >&2
+    elif ! is_merged "$path" "$branch"; then
+      echo "keeping $rel: branch not merged" >&2
     elif [ -n "$dry" ]; then
       echo "would remove $rel" >&2
     else
-      remove_worktree "$path" "$branch"
+      remove_worktree "$path" "$branch" || echo "keeping $rel: git could not remove it" >&2
     fi
   done
 }
@@ -361,25 +399,44 @@ cmd_publish() {
   done
   [ -n "$owner" ] || usage
   flag=$(visibility_flag "$visibility")
+  owner=$(canonical_owner "$owner")
   main=$(main_of .)
   name=$(basename "$main")
   dest=$root/$owner/$name
 
   [ "$(dirname "$main")" = "$root/$local_owner" ] || die "publish works on repos under $root/$local_owner"
-  ! has_origin "$main" || die "$main already has an origin"
+  # An origin that is already <owner>/<name>: an earlier publish created the repo and stopped part-way.
+  local resume=''
+  if has_origin "$main"; then
+    [ "$(github_repo "$(git -C "$main" config remote.origin.url)")" = "$owner/$name" ] ||
+      die "$main already has an origin"
+    resume=1
+  fi
   [ ! -e "$dest" ] && [ ! -e "$dest.wt" ] || die "$dest already exists"
-  if gh repo view "$owner/$name" --json nameWithOwner -q .nameWithOwner >/dev/null 2>&1; then
+  if [ -z "$resume" ] && gh repo view "$owner/$name" --json nameWithOwner -q .nameWithOwner >/dev/null 2>&1; then
     die "$owner/$name already exists on GitHub"
   fi
-  # Moving a directory from under a running process leaves it in a path that no longer exists.
+
+  # Moving a directory from under a running process leaves it in a path that no longer exists. grove itself and
+  # the shell that ran it don't count: grove leaves for /, and the shell's directory moves along with the repo.
+  local skip
+  skip=$(ancestors)
+  cd /
   local -a worktrees=() branches=()
   while IFS=$'\t' read -r path branch; do
-    if has_process_in "$path"; then die "$path is in use by a running process"; fi
     worktrees+=("$path")
     branches+=("$branch")
   done < <(worktrees_of "$main")
+  for path in "$main" "${worktrees[@]}"; do
+    if has_process_in "$path" "$skip"; then die "$path is in use by a running process"; fi
+  done
 
-  (cd "$main" && gh repo create "$owner/$name" "$flag" --source . --remote origin --push >&2)
+  trap 'echo "grove: publish stopped part-way; run it again from the repo to finish" >&2' EXIT
+  if [ -z "$resume" ]; then
+    (cd "$main" && gh repo create "$owner/$name" "$flag" --source . --remote origin --push >&2)
+  else
+    git -C "$main" push --quiet --set-upstream origin HEAD >&2
+  fi
   for branch in "${branches[@]}"; do
     case "$branch" in agent/*) git -C "$main" push --quiet --set-upstream origin "$branch" >&2 ;; esac
   done
@@ -390,6 +447,7 @@ cmd_publish() {
   if [ ${#worktrees[@]} -gt 0 ]; then
     git -C "$dest" worktree repair "${worktrees[@]/#"$main.wt"/"$dest.wt"}"
   fi
+  trap - EXIT
   echo "$dest"
 }
 

@@ -54,11 +54,17 @@ case "${1:-} ${2:-}" in
     if [ -n "$(canonical "$full")" ]; then echo "Name already exists on this account" >&2; exit 1; fi
     git init --quiet --bare -b main "$repos/$full.git"
     echo "$visibility" >"$repos/$full.git/visibility"
+    if [ -n "${GH_STUB_FAIL_PUSH:-}" ]; then echo "push failed" >&2; exit 1; fi
     if [ -n "$source" ]; then
       git -C "$source" remote add origin "https://github.com/$full.git"
       if [ -n "$push" ]; then git -C "$source" push --quiet --set-upstream origin HEAD; fi
     fi
     echo "https://github.com/$full"
+    ;;
+  "api users/"*)
+    # Canonical login from $GH_STUB/owners/<lowercase>, else as asked.
+    login=${2#users/}
+    if [ -f "$GH_STUB/owners/${login,,}" ]; then cat "$GH_STUB/owners/${login,,}"; else echo "$login"; fi
     ;;
   "pr list")
     shift 2
