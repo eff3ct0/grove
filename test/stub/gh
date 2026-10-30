@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Stand-in for the GitHub CLI in tests. Repositories are bare repos under $GH_STUB/repos/<owner>/<repo>.git, reached
+# through git's url.<base>.insteadOf, so remotes keep their real https://github.com/... URLs.
+set -euo pipefail
+repos=$GH_STUB/repos
+echo "gh $*" >>"$GH_STUB/log"
+
+# Canonical <owner>/<repo> for a case-insensitive spec, or nothing.
+canonical() {
+  local d rel
+  for d in "$repos"/*/*.git; do
+    [ -d "$d" ] || continue
+    rel=${d#"$repos"/}
+    rel=${rel%.git}
+    if [ "${rel,,}" = "${1,,}" ]; then
+      echo "$rel"
+      return
+    fi
+  done
+}
+
+case "${1:-} ${2:-}" in
+  "repo view")
+    full=$(canonical "$3")
+    if [ -z "$full" ]; then
+      echo "GraphQL: Could not resolve to a Repository with the name '$3'. (repository)" >&2
+      exit 1
+    fi
+    echo "$full"
+    ;;
+  "repo clone")
+    full=$3 dest=$4
+    shift 4
+    if [ "${1:-}" = -- ]; then shift; fi
+    git clone --quiet "$@" "https://github.com/$full.git" "$dest"
+    if [ -f "$repos/$full.git/parent" ]; then
+      git -C "$dest" remote add upstream "https://github.com/$(cat "$repos/$full.git/parent").git"
+    fi
+    ;;
+  "repo create")
+    full=$3
+    shift 3
+    visibility='' source='' push=''
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --private) visibility=private ;;
+        --public) visibility=public ;;
+        --source) source=$2; shift ;;
+        --push) push=1 ;;
+      esac
+      shift
+    done
+    if [ -z "$visibility" ]; then echo "visibility required" >&2; exit 1; fi
+    if [ -n "$(canonical "$full")" ]; then echo "Name already exists on this account" >&2; exit 1; fi
+    git init --quiet --bare -b main "$repos/$full.git"
+    echo "$visibility" >"$repos/$full.git/visibility"
+    if [ -n "$source" ]; then
+      git -C "$source" remote add origin "https://github.com/$full.git"
+      if [ -n "$push" ]; then git -C "$source" push --quiet --set-upstream origin HEAD; fi
+    fi
+    echo "https://github.com/$full"
+    ;;
+  "pr list")
+    shift 2
+    repo='' head=''
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -R) repo=$2; shift ;;
+        --head) head=$2; shift ;;
+      esac
+      shift
+    done
+    if [ -f "$GH_STUB/prs/$repo/$head" ]; then cat "$GH_STUB/prs/$repo/$head"; fi
+    ;;
+  *)
+    echo "gh stub: unsupported: $*" >&2
+    exit 1
+    ;;
+esac
