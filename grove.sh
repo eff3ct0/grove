@@ -66,6 +66,104 @@ cmd_clone() {
   echo "$dest"
 }
 
+visibility_flag() {
+  case "$1" in
+    private | public) echo "--$1" ;;
+    *) die "visibility must be private or public, got '$1'" ;;
+  esac
+}
+
+# Writes $2 with stdin unless $1/$2 already exists (a template may bring its own).
+write_missing() {
+  if [ -e "$1/$2" ]; then cat >/dev/null; else cat >"$1/$2"; fi
+}
+
+# init_repo <dir> <name> [template]: main branch with one commit, `chore: init`.
+init_repo() {
+  local dir=$1 name=$2 template=${3:-}
+  mkdir -p "$dir"
+  git -C "$dir" init --quiet -b main
+  if [ -n "$template" ]; then (cd "$dir" && nix flake init -t "$templates#$template" >&2); fi
+  write_missing "$dir" README.md <<EOF
+# $name
+EOF
+  write_missing "$dir" AGENTS.md <<EOF
+# $name
+
+<What this project is, in one sentence.>
+
+## Run
+
+\`<command>\`
+
+## Test
+
+\`<command>\`
+EOF
+  write_missing "$dir" .gitignore <<'EOF'
+.env
+.direnv/
+result
+result-*
+EOF
+  git -C "$dir" add -A
+  git -C "$dir" commit --quiet -m "chore: init"
+}
+
+cmd_new() {
+  local spec='' template='' visibility=$default_visibility dest
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --public) visibility=public ;;
+      --private) visibility=private ;;
+      -t)
+        [ $# -ge 2 ] || usage
+        template=$2
+        shift
+        ;;
+      -*) usage ;;
+      *)
+        [ -z "$spec" ] || usage
+        spec=$1
+        ;;
+    esac
+    shift
+  done
+  [ -n "$spec" ] || usage
+  if [ -n "$template" ] && [ -z "$templates" ]; then
+    die "-t needs GROVE_TEMPLATES (a flake reference whose templates -t can name)"
+  fi
+
+  if [[ "$spec" != */* ]]; then
+    dest=$root/$local_owner/$spec
+    if [ -e "$dest" ]; then
+      echo "already exists" >&2
+    else
+      # Leave nothing half-made behind.
+      trap 'rm -rf "$dest"' EXIT
+      init_repo "$dest" "$spec" "$template"
+      trap - EXIT
+    fi
+    echo "$dest"
+    return
+  fi
+
+  spec=$(parse_spec "$spec")
+  local flag
+  flag=$(visibility_flag "$visibility")
+  if gh repo view "$spec" --json nameWithOwner -q .nameWithOwner >/dev/null 2>&1; then
+    die "$spec already exists on GitHub; use: grove clone $spec"
+  fi
+  dest=$root/$spec
+  [ ! -e "$dest" ] || die "$dest already exists"
+  trap 'rm -rf "$dest"' EXIT
+  init_repo "$dest" "${spec#*/}" "$template"
+  # The only direct push to main grove makes.
+  (cd "$dest" && gh repo create "$spec" "$flag" --source . --remote origin --push >&2)
+  trap - EXIT
+  echo "$dest"
+}
+
 # Main checkout of the repo that contains $1 (also from inside a worktree).
 main_of() {
   local common
@@ -80,6 +178,10 @@ default_branch() {
   main=$(main_of "$1")
   git -C "$main" symbolic-ref --short -q refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||' && return
   git -C "$main" symbolic-ref --short -q HEAD || echo main
+}
+
+has_origin() {
+  git -C "$1" config remote.origin.url >/dev/null 2>&1
 }
 
 is_dirty() {
@@ -97,9 +199,13 @@ github_repo() {
 }
 
 # Merged: contained in origin/<default> (also a branch with no commits of its own), or with a merged PR
-# (squash) whose head is HEAD, on origin or upstream (forks).
+# (squash) whose head is HEAD, on origin or upstream (forks). Without origin: contained in the local default branch.
 is_merged() {
   local wt=$1 branch=$2 head remote repo
+  if ! has_origin "$wt"; then
+    git -C "$wt" merge-base --is-ancestor HEAD "refs/heads/$(default_branch "$wt")" 2>/dev/null
+    return
+  fi
   head=$(git -C "$wt" rev-parse HEAD)
   if git -C "$wt" merge-base --is-ancestor HEAD "origin/$(default_branch "$wt")" 2>/dev/null; then
     return 0
@@ -147,11 +253,17 @@ all_worktrees() {
 }
 
 remove_worktree() {
-  local wt=$1 branch=$2 main
+  local wt=$1 branch=$2 main keep=''
   main=$(main_of "$wt")
+  # Without a remote, an unmerged branch is the only copy of its commits.
+  if [ -n "$branch" ] && ! has_origin "$wt" && ! is_merged "$wt" "$branch"; then keep=1; fi
   git -C "$main" worktree remove "$wt"
-  # The branch is on a remote (or merged): deleting the local copy loses nothing.
-  if [ -n "$branch" ]; then git -C "$main" branch -D "$branch" >/dev/null || true; fi
+  if [ -n "$keep" ]; then
+    echo "kept branch $branch: not merged" >&2
+  elif [ -n "$branch" ]; then
+    # The branch is on a remote or merged: deleting the local copy loses nothing.
+    git -C "$main" branch -D "$branch" >/dev/null || true
+  fi
   rmdir "$main.wt" 2>/dev/null || true
   echo "removed $wt" >&2
 }
@@ -164,14 +276,15 @@ wt_new() {
   if [ -e "$dest" ]; then
     echo "already exists" >&2
   else
-    git -C "$main" fetch --quiet origin >&2 || true
+    if has_origin "$main"; then git -C "$main" fetch --quiet origin >&2 || true; fi
     if git -C "$main" show-ref --verify --quiet "refs/heads/$branch"; then
       git -C "$main" worktree add "$dest" "$branch" >&2
     elif git -C "$main" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
       git -C "$main" worktree add --track -b "$branch" "$dest" "origin/$branch" >&2
     else
       # --no-track: the first push creates origin/<branch> (push.autoSetupRemote), never pushes to the default branch.
-      base=${2:-origin/$(default_branch "$main")}
+      base=${2:-$(default_branch "$main")}
+      if [ $# -lt 2 ] && has_origin "$main"; then base=origin/$base; fi
       git -C "$main" worktree add --no-track -b "$branch" "$dest" "$base" >&2
     fi
   fi
@@ -183,7 +296,8 @@ wt_ls() {
   all_worktrees | while IFS=$'\t' read -r path branch; do
     state=clean
     if is_dirty "$path"; then state=dirty; fi
-    pushed="$(unpushed "$path") unpushed"
+    pushed=local
+    if has_origin "$path"; then pushed="$(unpushed "$path") unpushed"; fi
     merged=-
     if [ -z "$branch" ]; then
       merged=detached
@@ -200,7 +314,7 @@ wt_rm() {
   path=$(realpath "$1")
   branch=$(git -C "$path" symbolic-ref --short -q HEAD || true)
   if is_dirty "$path"; then die "$path has uncommitted changes"; fi
-  if [ "$(unpushed "$path")" -gt 0 ]; then die "$path has unpushed commits"; fi
+  if has_origin "$path" && [ "$(unpushed "$path")" -gt 0 ]; then die "$path has unpushed commits"; fi
   remove_worktree "$path" "$branch"
 }
 
@@ -213,7 +327,7 @@ wt_gc() {
       echo "keeping $rel: detached" >&2
     elif is_dirty "$path"; then
       echo "keeping $rel: uncommitted changes" >&2
-    elif [ "$(unpushed "$path")" -gt 0 ]; then
+    elif has_origin "$path" && [ "$(unpushed "$path")" -gt 0 ]; then
       echo "keeping $rel: unpushed commits" >&2
     elif ! is_merged "$path" "$branch"; then
       echo "keeping $rel: branch not merged" >&2
@@ -245,6 +359,7 @@ cmd=$1
 shift
 case "$cmd" in
   clone) cmd_clone "$@" ;;
+  new) cmd_new "$@" ;;
   wt) cmd_wt "$@" ;;
   -h | --help | help) usage ;;
   *) usage ;;

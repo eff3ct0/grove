@@ -11,6 +11,9 @@ setup() {
   git config --global user.email test@example.com
   git config --global init.defaultBranch main
   git config --global protocol.file.allow always
+  # Detached auto-gc would race the teardown.
+  git config --global gc.auto 0
+  git config --global maintenance.auto false
   git config --global "url.file://$GH_STUB/repos/.insteadOf" https://github.com/
   grove=$BATS_TEST_DIRNAME/../grove.sh
 }
