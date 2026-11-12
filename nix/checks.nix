@@ -74,6 +74,8 @@ in
         grep -q '^# ~/git$' "$agentsPath"
         grep -q 'grove wt new agent/<topic>' "$agentsPath"
         grep -q '^Alice Example decides on PRs and merges.$' "$agentsPath"
+        grep -q '"Related repos" section names the repos it depends on' "$agentsPath"
+        grep -q 'tell Alice Example and offer a PR to that repo.$' "$agentsPath"
         grep -q 'with-secrets <path> -- <cmd>' "$agentsPath"
         grep -q '^| `acme/api` | `/stripe/api` | payments |$' "$agentsPath"
         # extraAgentsDoc comes last.
