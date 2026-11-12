@@ -6,9 +6,11 @@ A bash CLI (`grove.sh`) plus a Nix flake with its package and home-manager modul
 ## Related repos
 
 - Depends on: none.
-- Used by: home-manager configurations, through `homeManagerModules.default` and the package. What they rely on
-  is the module's options, the generated `<root>/AGENTS.md` text, the `GROVE_*` variables and the CLI's output,
-  which hooks parse (`grove wt new` prints the path as the last line of stdout).
+- Used by: home-manager configurations, through `homeManagerModules.default` and the package. They are named
+  generically on purpose: grove is public, and the repos that use it may be private. What they rely on is the
+  module's options, the generated `<root>/AGENTS.md` text, the `GROVE_*` variables and the CLI's behaviour, which
+  hooks depend on: `grove wt new` prints the path as the last line of stdout, and `grove wt rm <path>` refuses
+  uncommitted changes and, with a remote, unpushed commits.
 
 ## Run
 
