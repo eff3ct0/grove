@@ -3,6 +3,12 @@
 A bash CLI (`grove.sh`) plus a Nix flake with its package and home-manager module (`nix/`). Read
 `docs/decisions.md` before changing behaviour: it records why each rule is the way it is.
 
+## Related repos
+
+- Depends on: none.
+- Used by: home-manager configurations, through `homeManagerModules.default` and the package. What they rely on
+  is the module's options, the generated `<root>/AGENTS.md` text and the `GROVE_*` variables.
+
 ## Run
 
 `nix run . -- <command>`, or `./grove.sh <command>` with git and gh on the PATH. Point `GROVE_ROOT` at a scratch

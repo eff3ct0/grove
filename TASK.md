@@ -19,10 +19,17 @@ Context from the same conversation, verbatim:
 - An agent that finds a repo it is not changing badly explained tells the user and offers a PR to that repo.
 - `grove new`'s AGENTS.md skeleton and eff3ct0/nixos-config's `templates/*/AGENTS.md` get a "## Related repos"
   section with two lines: "Depends on" and "Used by".
-- Existing repos are not filled in now: that happens per repo, through the PRs above.
+- Existing repos are not filled in now: that happens per repo, through the PRs above. Open decision for p3rkins:
+  the critic read "en los AGENTS.md" as possibly asking to fill the existing repos too.
+- The two repos changed here get the section in their own AGENTS.md, as the new rule asks. grove's names no
+  consumer repo: grove is public and generic, eff3ct0/nixos-config is private.
+- The module text reaches hefesto once grove's main is in eff3ct0/nixos-config's `flake.lock` (the nightly
+  `update-flake-lock` moves it).
 
 ## Steps
 
-- [ ] grove (branch `agent/repo-relations`): module text, skeleton in `grove.sh`, tests, README, decision 8.
-- [ ] eff3ct0/nixos-config (branch `agent/repo-relations`): `templates/{node,python,rust,scala}/AGENTS.md`.
-- [ ] Critic on both branches; remove this file once it passes.
+- [x] grove (branch `agent/repo-relations`): module text, skeleton in `grove.sh`, tests, README, decision 8.
+- [x] eff3ct0/nixos-config (branch `agent/repo-relations`): `templates/{node,python,rust,scala}/AGENTS.md`.
+- [x] First critic: failed Done (no section in grove's and nixos-config's own AGENTS.md) and Resume (this list).
+- [x] Fix: the section in both repos' own AGENTS.md, this list, README wrap.
+- [ ] Recheck by a fresh critic; remove this file once it passes.
