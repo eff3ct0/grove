@@ -63,9 +63,11 @@ the only direct push to `main` grove ever makes.
 
 ## 8. Every new repo gets an `AGENTS.md` skeleton without a secrets section
 
-The skeleton asks for what an agent needs first: what the project is, how to run it and how to test it. Where secrets
-come from depends on each machine, so it is not part of the per-repo template: the module documents it once, for all
-repos, through `secrets.command` and `secrets.paths`.
+The skeleton asks for what an agent needs first: what the project is, which repos it relates to, how to run it and how
+to test it. Each repo names the repos it depends on and the ones that depend on it, so no central map of repos has to
+be kept in step, and an agent working in one repo knows who uses it before changing what passes between them. Where
+secrets come from depends on each machine, so it is not part of the per-repo template: the module documents it once,
+for all repos, through `secrets.command` and `secrets.paths`.
 
 ## 9. A plain bash script configured through `GROVE_*` variables
 

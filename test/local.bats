@@ -27,8 +27,11 @@ load helpers
   [ "$(git -C "$repo" rev-list --count HEAD)" -eq 2 ]
 }
 
-@test "the AGENTS.md skeleton covers run and test and has no secrets section" {
+@test "the AGENTS.md skeleton covers related repos, run and test and has no secrets section" {
   repo=$(local_repo scratch)
+  grep -qi '^## related repos' "$repo/AGENTS.md"
+  grep -q '^- Depends on: <`owner/repo`: ' "$repo/AGENTS.md"
+  grep -q '^- Used by: <`owner/repo`: ' "$repo/AGENTS.md"
   grep -qi '^## run' "$repo/AGENTS.md"
   grep -qi '^## test' "$repo/AGENTS.md"
   ! grep -qi secret "$repo/AGENTS.md"

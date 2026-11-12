@@ -28,8 +28,8 @@ One clone per repo, at a predictable path, with agent work in sibling worktrees.
 | `grove wt gc [-n]` | Remove worktrees that are clean, pushed, merged (squash merges included, via `gh`) and untouched for an hour, with no process inside. `-n` only reports. |
 
 New repos start on `main` with one commit, `chore: init`, holding a `README.md`, an `AGENTS.md` skeleton (what it is,
-how to run it, how to test it) and a `.gitignore`. With `-t <template>`, `nix flake init -t $GROVE_TEMPLATES#<template>`
-runs first and its files win over the defaults.
+which repos it relates to, how to run it, how to test it) and a `.gitignore`. With `-t <template>`,
+`nix flake init -t $GROVE_TEMPLATES#<template>` runs first and its files win over the defaults.
 
 Repos without `origin` are first-class: `wt new` branches from the local default branch without fetching, `rm` needs
 nothing pushed (an unmerged branch is kept), and `gc` uses "merged into the local default branch".
