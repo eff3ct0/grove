@@ -32,4 +32,8 @@ Context from the same conversation, verbatim:
 - [x] eff3ct0/nixos-config (branch `agent/repo-relations`): `templates/{node,python,rust,scala}/AGENTS.md`.
 - [x] First critic: failed Done (no section in grove's and nixos-config's own AGENTS.md) and Resume (this list).
 - [x] Fix: the section in both repos' own AGENTS.md, this list, README wrap.
-- [ ] Recheck by a fresh critic; remove this file once it passes.
+- [x] Recheck by a fresh critic: failed Done (nixos-config's "Used by: none" is false: eff3ct0/fixco's
+  deploy-hefesto job pushes to its main); minor: scope of "repos", grove's CLI contract, reason for no consumer name.
+- [x] Fix of the recheck's findings.
+- [ ] Not rechecked yet: open decision for p3rkins (another critic, or review it directly). Remove this file once a
+  critic passes.

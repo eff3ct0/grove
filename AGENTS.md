@@ -7,7 +7,8 @@ A bash CLI (`grove.sh`) plus a Nix flake with its package and home-manager modul
 
 - Depends on: none.
 - Used by: home-manager configurations, through `homeManagerModules.default` and the package. What they rely on
-  is the module's options, the generated `<root>/AGENTS.md` text and the `GROVE_*` variables.
+  is the module's options, the generated `<root>/AGENTS.md` text, the `GROVE_*` variables and the CLI's output,
+  which hooks parse (`grove wt new` prints the path as the last line of stdout).
 
 ## Run
 

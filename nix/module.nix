@@ -149,9 +149,10 @@ in
 
         Each repo's `AGENTS.md` says what the repo is, how it relates to other repos and how to run and test it. Its
         "Related repos" section names the repos it depends on and the repos that depend on it, as `<owner>/<repo>`,
-        with what passes between them (an API, a package, a spec, a module), or says there are none. Read it before
-        changing a repo: not every agent loads it on its own. When it is missing or wrong, fix it in your branch; in a
-        repo you are not changing, tell ${cfg.userName} and offer a PR to that repo.
+        with what passes between them (an API, a package, a spec, a module, a CI job), or says there are none;
+        third-party dependencies such as libraries or upstream flakes do not count. Read it before changing a repo:
+        not every agent loads it on its own. When it is missing or wrong, fix it in your branch; in a repo you are not
+        changing, tell ${cfg.userName} and offer a PR to that repo.
       '';
       defaultText = lib.literalMD "Generic rules for working under `root` with grove.";
       description = "Instructions for agents working under `root`. Prefer `extraAgentsDoc` for additions.";
