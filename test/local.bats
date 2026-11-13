@@ -9,7 +9,7 @@ load helpers
   [ "$(git -C "$repo" log --format=%s)" = "chore: init" ]
   [ -z "$(git -C "$repo" remote)" ]
   [ -z "$(git -C "$repo" status --porcelain)" ]
-  [ "$(git -C "$repo" ls-files | LC_ALL=C sort | tr '\n' ' ')" = ".gitignore AGENTS.md README.md " ]
+  [ "$(git -C "$repo" ls-files | LC_ALL=C sort | tr '\n' ' ')" = ".gitignore AGENTS.md CLAUDE.md README.md " ]
   grep -q '^# scratch$' "$repo/README.md"
 }
 
@@ -37,6 +37,12 @@ load helpers
   ! grep -qi secret "$repo/AGENTS.md"
 }
 
+@test "CLAUDE.md is the single line @AGENTS.md" {
+  repo=$(local_repo scratch)
+  [ "$(cat "$repo/CLAUDE.md")" = "@AGENTS.md" ]
+  [ "$(wc -l <"$repo/CLAUDE.md")" -eq 1 ]
+}
+
 @test "new -t without GROVE_TEMPLATES fails with a clear error and creates nothing" {
   run "$grove" new scratch -t python
   [ "$status" -ne 0 ]
@@ -58,7 +64,8 @@ STUB
   repo=$GROVE_ROOT/local/scratch
   [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#python" ]
   [ "$(cat "$repo/AGENTS.md")" = "template agents" ]
-  git -C "$repo" ls-files --error-unmatch devenv.nix README.md .gitignore
+  [ "$(cat "$repo/CLAUDE.md")" = "@AGENTS.md" ]
+  git -C "$repo" ls-files --error-unmatch devenv.nix README.md CLAUDE.md .gitignore
 }
 
 @test "wt new in a local repo branches from the local default branch without fetching" {
