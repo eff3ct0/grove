@@ -69,6 +69,10 @@ be kept in step, and an agent working in one repo knows who uses it before chang
 secrets come from depends on each machine, so it is not part of the per-repo template: the module documents it once,
 for all repos, through `secrets.command` and `secrets.paths`.
 
+A `CLAUDE.md` holding only `@AGENTS.md` comes with it. Claude Code reads `CLAUDE.md` and most other agents read
+`AGENTS.md`; the import gives both the same instructions from one file, so they cannot drift apart. Unlike the import
+decision 10 rules out, this one stays inside the project and needs no approval.
+
 ## 9. A plain bash script configured through `GROVE_*` variables
 
 grove is one bash script with no dependencies beyond git, gh and coreutils, so it runs anywhere, with or without Nix.
