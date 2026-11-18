@@ -51,21 +51,101 @@ load helpers
 }
 
 @test "new -t runs nix flake init from GROVE_TEMPLATES and keeps the template's files" {
-  mkdir -p "$T/bin"
-  echo "#!$BASH" >"$T/bin/nix"
-  cat >>"$T/bin/nix" <<'STUB'
-echo "$*" >"$GH_STUB/nix-args"
-echo "template agents" >AGENTS.md
-echo "{ }" >devenv.nix
-STUB
-  chmod +x "$T/bin/nix"
-  PATH=$T/bin:$PATH GROVE_TEMPLATES=/flakes/mine run "$grove" new scratch -t python
+  nix_stub 'echo "template agents" >AGENTS.md; echo "{ }" >devenv.nix'
+  GROVE_TEMPLATES=/flakes/mine run "$grove" new scratch -t python
   [ "$status" -eq 0 ]
   repo=$GROVE_ROOT/local/scratch
   [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#python" ]
   [ "$(cat "$repo/AGENTS.md")" = "template agents" ]
   [ "$(cat "$repo/CLAUDE.md")" = "@AGENTS.md" ]
   git -C "$repo" ls-files --error-unmatch devenv.nix README.md CLAUDE.md .gitignore
+}
+
+@test "new keeps the CLAUDE.md a template brings, as the template wrote it" {
+  nix_stub 'printf "# Template rules\n\nSee AGENTS.md.\n" >CLAUDE.md'
+  GROVE_TEMPLATES=/flakes/mine run "$grove" new scratch -t python
+  [ "$status" -eq 0 ]
+  repo=$GROVE_ROOT/local/scratch
+  [ "$(cat "$repo/CLAUDE.md")" = "$(printf '# Template rules\n\nSee AGENTS.md.')" ]
+  [ "$(git -C "$repo" show HEAD:CLAUDE.md)" = "$(cat "$repo/CLAUDE.md")" ]
+  [ "$(git -C "$repo" log --format=%s)" = "chore: init" ]
+}
+
+@test "new <repo> without -t runs the template GROVE_DEFAULT_TEMPLATES names for the local owner" {
+  nix_stub 'echo "{ }" >devenv.nix'
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=acme=web,local=base run "$grove" new scratch
+  [ "$status" -eq 0 ]
+  repo=$GROVE_ROOT/local/scratch
+  [ "${lines[-1]}" = "$repo" ]
+  [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#base" ]
+  [ "$(git -C "$repo" log --format=%s)" = "chore: init" ]
+  git -C "$repo" ls-files --error-unmatch devenv.nix AGENTS.md CLAUDE.md
+}
+
+@test "the local owner's default template follows GROVE_LOCAL_OWNER" {
+  nix_stub
+  GROVE_LOCAL_OWNER=mine GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=$'local=web\nmine=base' \
+    run "$grove" new scratch
+  [ "$status" -eq 0 ]
+  [ "${lines[-1]}" = "$GROVE_ROOT/mine/scratch" ]
+  [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#base" ]
+}
+
+@test "new <repo> -t replaces the local owner's default template" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=local=base run "$grove" new scratch -t other
+  [ "$status" -eq 0 ]
+  [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#other" ]
+}
+
+@test "new <repo> runs no template when GROVE_DEFAULT_TEMPLATES does not name the local owner" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=acme=base run "$grove" new scratch
+  [ "$status" -eq 0 ]
+  repo=$GROVE_ROOT/local/scratch
+  [ ! -e "$GH_STUB/nix-args" ]
+  [ "$(git -C "$repo" ls-files | LC_ALL=C sort | tr '\n' ' ')" = ".gitignore AGENTS.md CLAUDE.md README.md " ]
+}
+
+@test "a default template without GROVE_TEMPLATES fails with a clear error and creates nothing" {
+  nix_stub
+  GROVE_DEFAULT_TEMPLATES=local=base run "$grove" new scratch
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"GROVE_DEFAULT_TEMPLATES gives local the template base, which needs GROVE_TEMPLATES"* ]]
+  [ ! -e "$GROVE_ROOT/local/scratch" ]
+  [ ! -e "$GH_STUB/nix-args" ]
+}
+
+@test "a GROVE_DEFAULT_TEMPLATES entry that is not <owner>=<template> fails and creates nothing" {
+  nix_stub
+  for map in acme local=base,acme 'local=base acme=' =base; do
+    GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=$map run "$grove" new scratch
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"is not <owner>=<template>"* ]]
+    [ ! -e "$GROVE_ROOT/local/scratch" ]
+  done
+  [ ! -e "$GH_STUB/nix-args" ]
+}
+
+@test "empty entries in GROVE_DEFAULT_TEMPLATES are skipped wherever they are" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=',acme=web,,local=base,' run "$grove" new scratch
+  [ "$status" -eq 0 ]
+  [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#base" ]
+}
+
+@test "new <repo> -t '' runs no template even where the local owner has a default" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=local=base run "$grove" new scratch -t ''
+  [ "$status" -eq 0 ]
+  [ ! -e "$GH_STUB/nix-args" ]
+}
+
+@test "an empty GROVE_DEFAULT_TEMPLATES runs no template" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES= run "$grove" new scratch
+  [ "$status" -eq 0 ]
+  [ ! -e "$GH_STUB/nix-args" ]
 }
 
 @test "wt new in a local repo branches from the local default branch without fetching" {

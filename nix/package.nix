@@ -20,7 +20,7 @@ writeShellApplication {
     gnused
     util-linux
   ];
-  # `grove new -t` runs `nix flake init` with the nix already on the PATH.
+  # `grove new` runs `nix flake init` for a template (`-t` or the owner's default) with the nix already on the PATH.
   text = builtins.readFile ../grove.sh;
   meta = {
     description = "One clone per repo, agent work in sibling worktrees";

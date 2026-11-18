@@ -16,6 +16,20 @@ let
 
   gitName = lib.attrByPath [ "programs" "git" "settings" "user" "name" ] null config;
 
+  # GROVE_DEFAULT_TEMPLATES: <owner>=<template> pairs, comma-separated.
+  defaultTemplates = lib.concatStringsSep "," (
+    lib.mapAttrsToList (owner: template: "${owner}=${template}") cfg.defaultTemplates
+  );
+
+  # Variables grove has no default for, set only when configured.
+  optionalDefaults =
+    lib.optional (
+      cfg.templates != null
+    ) "--set-default GROVE_TEMPLATES ${lib.escapeShellArg cfg.templates}"
+    ++ lib.optional (
+      cfg.defaultTemplates != { }
+    ) "--set-default GROVE_DEFAULT_TEMPLATES ${lib.escapeShellArg defaultTemplates}";
+
   package = pkgs.symlinkJoin {
     name = "grove-configured";
     paths = [ cfg.package ];
@@ -26,9 +40,7 @@ let
         --set-default GROVE_ROOT ${lib.escapeShellArg cfg.root} \
         --set-default GROVE_LOCAL_OWNER ${lib.escapeShellArg cfg.localOwner} \
         --set-default GROVE_DEFAULT_VISIBILITY ${cfg.defaultVisibility} \
-        ${lib.optionalString (
-          cfg.templates != null
-        ) "--set-default GROVE_TEMPLATES ${lib.escapeShellArg cfg.templates}"}
+        ${lib.concatStringsSep " " optionalDefaults}
     '';
   };
 
@@ -97,6 +109,20 @@ in
       default = null;
       example = lib.literalExpression "inputs.self";
       description = "Flake whose templates `grove new -t <name>` uses (`nix flake init -t <templates>#<name>`).";
+    };
+
+    defaultTemplates = mkOption {
+      type = types.attrsOf (types.strMatching "[^,=[:space:]]+");
+      default = { };
+      example = {
+        acme = "base";
+        local = "base";
+      };
+      description = ''
+        Template `grove new` uses without `-t`, per owner: `"<owner>" = "<template>"`, where the owner is the GitHub
+        owner, or `localOwner` for a local repo. An owner not named gets no template, and `-t` replaces the default.
+        Needs `templates`.
+      '';
     };
 
     userName = mkOption {
@@ -192,6 +218,16 @@ in
       {
         assertion = cfg.secrets.paths == { } || cfg.secrets.command != null;
         message = "programs.grove.secrets.paths needs programs.grove.secrets.command.";
+      }
+      {
+        assertion = cfg.defaultTemplates == { } || cfg.templates != null;
+        message = "programs.grove.defaultTemplates needs programs.grove.templates.";
+      }
+      {
+        assertion = lib.all (owner: builtins.match "[^,=[:space:]]+" owner != null) (
+          lib.attrNames cfg.defaultTemplates
+        );
+        message = "programs.grove.defaultTemplates: an owner cannot contain commas, = or whitespace.";
       }
     ];
 

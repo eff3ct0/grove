@@ -71,14 +71,17 @@ for all repos, through `secrets.command` and `secrets.paths`.
 
 A `CLAUDE.md` holding only `@AGENTS.md` comes with it. Claude Code reads `CLAUDE.md` and most other agents read
 `AGENTS.md`; the import gives both the same instructions from one file, so they cannot drift apart. Unlike the import
-decision 10 rules out, this one stays inside the project and needs no approval.
+decision 10 rules out, this one stays inside the project and needs no approval. Like every file of the skeleton, it is
+written only when missing, before the `chore: init` commit: a `CLAUDE.md` a template brings stays as the template
+wrote it.
 
 ## 9. A plain bash script configured through `GROVE_*` variables
 
 grove is one bash script with no dependencies beyond git, gh and coreutils, so it runs anywhere, with or without Nix.
 All configuration comes from environment variables (`GROVE_ROOT`, `GROVE_LOCAL_OWNER`, `GROVE_DEFAULT_VISIBILITY`,
-`GROVE_TEMPLATES`); the Nix package only sets them. Templates are optional and have no default, because they are
-specific to whoever uses grove; `-t` without `GROVE_TEMPLATES` is an error rather than a guess.
+`GROVE_TEMPLATES`, `GROVE_DEFAULT_TEMPLATES`); the Nix package only sets them. Templates are optional and have no
+default, because they are specific to whoever uses grove; `-t` without `GROVE_TEMPLATES` is an error rather than a
+guess, and so is a default template (decision 13) without it.
 
 ## 10. One generated instructions file for every repo under the root
 
@@ -100,3 +103,21 @@ The tests run against a temporary `GROVE_ROOT` with local repos and local bare r
 GitHub (`clone`, `new <owner>/<repo>`, `publish`, squash-merge detection) run against a stub `gh` placed first on the
 `PATH`, which answers from local bare repos. A test run needs no network and no credentials, and can never create,
 change or read a real repository.
+
+## 13. A default template per owner, which `-t` replaces
+
+`GROVE_DEFAULT_TEMPLATES` maps owners to templates, as `<owner>=<template>` pairs separated by commas (or whitespace).
+`grove new` without `-t` runs the template it names for the new repo's owner: GitHub's spelling of the owner, matched
+ignoring case as GitHub does, or `GROVE_LOCAL_OWNER` for a local repo. The module's `defaultTemplates` sets it.
+
+- **Per owner**, because owners differ in who else works in their repos. A configuration can give every repo it
+  creates for its own owners a template that wires the repo into its tooling from the first commit, while a repo of an
+  organization shared with other people gets nothing that leaves a trace in it, unless someone asks for it with `-t`.
+- **An owner the map does not name gets no template**, as without the map: grove cannot know what another owner's
+  repos should carry, and an empty skeleton is the only choice that assumes nothing about them.
+- **`-t` replaces the default** rather than adding to it: a repo starts from one template (`nix flake init` refuses
+  to overwrite a file an earlier template wrote), and a choice made for one repo beats a standing one. To create a
+  repo with no template at all where the map names one, run `grove new` with `GROVE_DEFAULT_TEMPLATES` set to empty.
+- **The map has no default**: which templates exist and which owners get one belong to the configuration, as
+  `GROVE_TEMPLATES` does. A default that applies while `GROVE_TEMPLATES` is unset is an error, like `-t` without it,
+  rather than a repo created without the template the configuration asked for; a malformed pair is an error too.
