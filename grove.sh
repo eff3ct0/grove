@@ -10,6 +10,7 @@ if [ -d "$root" ]; then root=$(cd "$root" && pwd -P); fi
 local_owner=${GROVE_LOCAL_OWNER:-local}
 default_visibility=${GROVE_DEFAULT_VISIBILITY:-private}
 templates=${GROVE_TEMPLATES:-}
+default_templates=${GROVE_DEFAULT_TEMPLATES:-}
 
 usage() {
   cat >&2 <<'EOF'
@@ -20,6 +21,8 @@ usage: grove <command>
                         create the repo on GitHub, with an initial commit on main, and print its path.
   new <repo> [-t <template>]
                         create a local repo (no remote) at <root>/<local owner>/<repo> and print its path.
+                        without -t, both use the template GROVE_DEFAULT_TEMPLATES names for the owner (the
+                        local owner for <repo>), if any.
   publish <owner> [--public|--private]
                         from inside a local repo: create it on GitHub, push main and the agent/* branches
                         that have a worktree, and move it (and its worktrees) to <root>/<owner>/.
@@ -30,7 +33,9 @@ usage: grove <command>
   wt gc [-n]            remove the worktrees that are clean, pushed, merged and unused for an hour. -n: dry run.
 
 environment: GROVE_ROOT (default ~/git), GROVE_LOCAL_OWNER (default local),
-             GROVE_DEFAULT_VISIBILITY (default private), GROVE_TEMPLATES (flake for -t, no default).
+             GROVE_DEFAULT_VISIBILITY (default private), GROVE_TEMPLATES (flake for -t, no default),
+             GROVE_DEFAULT_TEMPLATES (<owner>=<template> pairs, comma-separated: new's template without -t,
+             no default).
 EOF
   exit 2
 }
@@ -71,6 +76,21 @@ cmd_clone() {
     gh repo clone "$full" "$dest" "$@" >&2
   fi
   echo "$dest"
+}
+
+# Template GROVE_DEFAULT_TEMPLATES names for owner $1, or nothing. The map is <owner>=<template> pairs separated by
+# commas or whitespace; owners match ignoring case, as GitHub's do, and the first match wins. Any malformed pair is
+# an error, whichever owner is asked for.
+default_template() {
+  local -a pairs
+  local pair owner found=''
+  IFS=$', \t\n' read -r -d '' -a pairs <<<"$default_templates" || true
+  for pair in "${pairs[@]}"; do
+    [[ "$pair" == ?*=?* ]] || die "GROVE_DEFAULT_TEMPLATES: '$pair' is not <owner>=<template>"
+    owner=${pair%%=*}
+    if [ -z "$found" ] && [ "${owner,,}" = "${1,,}" ]; then found=${pair#*=}; fi
+  done
+  echo "$found"
 }
 
 visibility_flag() {
@@ -126,7 +146,7 @@ EOF
 }
 
 cmd_new() {
-  local spec='' template='' visibility=$default_visibility dest
+  local spec='' template='' visibility=$default_visibility owner dest
   while [ $# -gt 0 ]; do
     case "$1" in
       --public) visibility=public ;;
@@ -149,6 +169,20 @@ cmd_new() {
     die "-t needs GROVE_TEMPLATES (a flake reference whose templates -t can name)"
   fi
 
+  owner=$local_owner
+  if [[ "$spec" == */* ]]; then
+    spec=$(parse_spec "$spec")
+    owner=$(canonical_owner "${spec%%/*}")
+    spec=$owner/${spec#*/}
+  fi
+  # -t replaces the owner's default.
+  if [ -z "$template" ]; then
+    template=$(default_template "$owner")
+    if [ -n "$template" ] && [ -z "$templates" ]; then
+      die "GROVE_DEFAULT_TEMPLATES gives $owner the template $template, which needs GROVE_TEMPLATES"
+    fi
+  fi
+
   if [[ "$spec" != */* ]]; then
     dest=$root/$local_owner/$spec
     if [ -e "$dest" ]; then
@@ -163,8 +197,6 @@ cmd_new() {
     return
   fi
 
-  spec=$(parse_spec "$spec")
-  spec=$(canonical_owner "${spec%%/*}")/${spec#*/}
   local flag
   flag=$(visibility_flag "$visibility")
   if gh repo view "$spec" --json nameWithOwner -q .nameWithOwner >/dev/null 2>&1; then

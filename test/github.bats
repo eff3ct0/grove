@@ -183,3 +183,50 @@ load helpers
   run "$grove" publish acme
   [ "$status" -eq 0 ]
 }
+
+@test "new <owner>/<repo> without -t runs the owner's default template and pushes its files in chore: init" {
+  nix_stub 'echo "{ }" >devenv.nix'
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=acme=base,local=web run "$grove" new acme/x
+  [ "$status" -eq 0 ]
+  [ "${lines[-1]}" = "$GROVE_ROOT/acme/x" ]
+  [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#base" ]
+  bare=$GH_STUB/repos/acme/x.git
+  [ "$(git --git-dir="$bare" log --format=%s main)" = "chore: init" ]
+  git --git-dir="$bare" cat-file -e main:devenv.nix
+  [ "$(git --git-dir="$bare" show main:CLAUDE.md)" = "@AGENTS.md" ]
+}
+
+@test "the owner's default template matches GitHub's spelling of the owner, ignoring case" {
+  mkdir -p "$GH_STUB/owners"
+  echo Acme >"$GH_STUB/owners/acme"
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=ACME=base run "$grove" new acme/x
+  [ "$status" -eq 0 ]
+  [ "${lines[-1]}" = "$GROVE_ROOT/Acme/x" ]
+  [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#base" ]
+}
+
+@test "new <owner>/<repo> -t replaces the owner's default template" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=acme=base run "$grove" new acme/x -t other
+  [ "$status" -eq 0 ]
+  [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#other" ]
+}
+
+@test "new <owner>/<repo> runs no template for an owner GROVE_DEFAULT_TEMPLATES does not name" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=acme=base,local=base run "$grove" new other-owner/z
+  [ "$status" -eq 0 ]
+  [ "${lines[-1]}" = "$GROVE_ROOT/other-owner/z" ]
+  [ ! -e "$GH_STUB/nix-args" ]
+  bare=$GH_STUB/repos/other-owner/z.git
+  [ "$(git --git-dir="$bare" ls-tree --name-only main | LC_ALL=C sort | tr '\n' ' ')" = ".gitignore AGENTS.md CLAUDE.md README.md " ]
+}
+
+@test "new <owner>/<repo> with a default template and no GROVE_TEMPLATES creates nothing, here or on GitHub" {
+  GROVE_DEFAULT_TEMPLATES=acme=base run "$grove" new acme/x
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"GROVE_DEFAULT_TEMPLATES gives acme the template base, which needs GROVE_TEMPLATES"* ]]
+  [ ! -e "$GROVE_ROOT/acme/x" ]
+  [ ! -e "$GH_STUB/repos/acme/x.git" ]
+}

@@ -5,7 +5,7 @@ setup() {
   export HOME=$T/home GROVE_ROOT=$T/root GH_STUB=$T/gh
   mkdir -p "$HOME" "$GROVE_ROOT" "$GH_STUB/repos"
   export PATH="$BATS_TEST_DIRNAME/stub:$PATH"
-  unset GROVE_LOCAL_OWNER GROVE_DEFAULT_VISIBILITY GROVE_TEMPLATES
+  unset GROVE_LOCAL_OWNER GROVE_DEFAULT_VISIBILITY GROVE_TEMPLATES GROVE_DEFAULT_TEMPLATES
   export GIT_CONFIG_GLOBAL=$T/gitconfig GIT_CONFIG_NOSYSTEM=1
   git config --global user.name Test
   git config --global user.email test@example.com
@@ -65,4 +65,17 @@ age() {
 hold_cwd() {
   (cd "$1" && exec sleep 60) &
   sleep 0.2
+}
+
+# nix_stub [script]: a nix first on the PATH that appends its arguments to $GH_STUB/nix-args, then runs the bash in
+# script from its working directory (the new repo's, as for `nix flake init`).
+nix_stub() {
+  mkdir -p "$T/bin"
+  echo "#!$BASH" >"$T/bin/nix"
+  cat >>"$T/bin/nix" <<'STUB'
+echo "$*" >>"$GH_STUB/nix-args"
+STUB
+  echo "${1:-}" >>"$T/bin/nix"
+  chmod +x "$T/bin/nix"
+  PATH=$T/bin:$PATH
 }
