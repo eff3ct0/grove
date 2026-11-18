@@ -79,13 +79,14 @@ cmd_clone() {
 }
 
 # Template GROVE_DEFAULT_TEMPLATES names for owner $1, or nothing. The map is <owner>=<template> pairs separated by
-# commas or whitespace; owners match ignoring case, as GitHub's do, and the first match wins. Any malformed pair is
-# an error, whichever owner is asked for.
+# commas or whitespace (empty entries are skipped); owners match ignoring case, as GitHub's do, and the first match
+# wins. Any malformed pair is an error, whichever owner is asked for.
 default_template() {
   local -a pairs
   local pair owner found=''
   IFS=$', \t\n' read -r -d '' -a pairs <<<"$default_templates" || true
   for pair in "${pairs[@]}"; do
+    [ -n "$pair" ] || continue
     [[ "$pair" == ?*=?* ]] || die "GROVE_DEFAULT_TEMPLATES: '$pair' is not <owner>=<template>"
     owner=${pair%%=*}
     if [ -z "$found" ] && [ "${owner,,}" = "${1,,}" ]; then found=${pair#*=}; fi
@@ -146,7 +147,7 @@ EOF
 }
 
 cmd_new() {
-  local spec='' template='' visibility=$default_visibility owner dest
+  local spec='' template='' chosen='' visibility=$default_visibility owner dest
   while [ $# -gt 0 ]; do
     case "$1" in
       --public) visibility=public ;;
@@ -154,6 +155,7 @@ cmd_new() {
       -t)
         [ $# -ge 2 ] || usage
         template=$2
+        chosen=1
         shift
         ;;
       -*) usage ;;
@@ -175,8 +177,8 @@ cmd_new() {
     owner=$(canonical_owner "${spec%%/*}")
     spec=$owner/${spec#*/}
   fi
-  # -t replaces the owner's default.
-  if [ -z "$template" ]; then
+  # -t replaces the owner's default, even with an empty name, which means no template.
+  if [ -z "$chosen" ]; then
     template=$(default_template "$owner")
     if [ -n "$template" ] && [ -z "$templates" ]; then
       die "GROVE_DEFAULT_TEMPLATES gives $owner the template $template, which needs GROVE_TEMPLATES"

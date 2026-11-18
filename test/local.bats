@@ -127,6 +127,20 @@ load helpers
   [ ! -e "$GH_STUB/nix-args" ]
 }
 
+@test "empty entries in GROVE_DEFAULT_TEMPLATES are skipped wherever they are" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=',acme=web,,local=base,' run "$grove" new scratch
+  [ "$status" -eq 0 ]
+  [ "$(cat "$GH_STUB/nix-args")" = "flake init -t /flakes/mine#base" ]
+}
+
+@test "new <repo> -t '' runs no template even where the local owner has a default" {
+  nix_stub
+  GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=local=base run "$grove" new scratch -t ''
+  [ "$status" -eq 0 ]
+  [ ! -e "$GH_STUB/nix-args" ]
+}
+
 @test "an empty GROVE_DEFAULT_TEMPLATES runs no template" {
   nix_stub
   GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES= run "$grove" new scratch

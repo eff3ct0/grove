@@ -41,8 +41,9 @@ The reasons behind each choice are in [docs/decisions.md](docs/decisions.md).
 ## Requirements
 
 bash, git, coreutils, findutils, gawk, sed, `column` (util-linux) and an authenticated [GitHub CLI](https://cli.github.com)
-for anything that talks to GitHub. `nix` only for `-t`. Detecting processes inside a worktree reads `/proc`, so on
-systems without it `gc` and `publish` rely on the one-hour rule alone.
+for anything that talks to GitHub. `nix` only for templates (`-t`, or the owner's default from
+`GROVE_DEFAULT_TEMPLATES`). Detecting processes inside a worktree reads `/proc`, so on systems without it `gc` and
+`publish` rely on the one-hour rule alone.
 
 ## Configuration
 

@@ -34,6 +34,12 @@ correction comments, #49).
   `nix/checks.nix` tests both and the `templates` assertion with `builtins.tryEval`, since home-manager's `config`
   throws on a failed assertion.
 
+- After the first critic: `-t ''` still means no template (as at the base), empty map entries are skipped wherever
+  they are, and the README and `nix/package.nix` say `nix` is needed for any template, not only `-t`.
+- Kept out of this branch: `cmd_new`'s `trap 'rm -rf "$dest"' EXIT` fails with "dest: unbound variable" when
+  `init_repo` fails (for example `nix flake init`), leaving a half-made repo. It predates this change (the base shows
+  it with `-t`), so it goes to the user as a separate fix.
+
 ## Steps
 
 - [x] `grove.sh`: `default_template`, `cmd_new`, usage text.
@@ -42,4 +48,5 @@ correction comments, #49).
 - [x] `nix/module.nix`: option, wrapper variable, assertion; `nix/checks.nix`: wrapper and assertion.
 - [x] `docs/decisions.md` entry 13 and decision 9's variable list; README; usage.
 - [x] bats, shellcheck, `nix flake check`; an end-to-end run with real `nix flake init` and a throwaway flake.
-- [ ] Critic, fixes, recheck; remove this file; PR saying which part of #3 grove#2 covers.
+- [x] Critic; fixes.
+- [ ] Recheck; remove this file; PR saying which part of #3 grove#2 covers.
