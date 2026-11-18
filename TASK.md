@@ -25,8 +25,8 @@ Base commit: `9c1f5bf` (main, with #5 merged).
 
 ## Steps
 
-- [ ] `grove.sh`: the helper and both call sites.
-- [ ] bats: a failing template leaves nothing, local and GitHub paths (nothing on the stub GitHub either), a retry
+- [x] `grove.sh`: the helper and both call sites.
+- [x] bats: a failing template leaves nothing, local and GitHub paths (nothing on the stub GitHub either), a retry
       works, and a root path that needs quoting.
-- [ ] bats, shellcheck, `nix flake check`.
+- [x] bats, shellcheck, `nix flake check`.
 - [ ] Critic, recheck if needed; remove this file; PR.

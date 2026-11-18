@@ -106,6 +106,13 @@ write_missing() {
   if [ -e "$1/$2" ]; then cat >/dev/null; else cat >"$1/$2"; fi
 }
 
+# Removes $1 when grove exits, until `trap - EXIT`: a repo being made, so that a failure leaves nothing half-made
+# behind. The path is fixed now, because bash runs the trap after the caller's locals are gone.
+remove_on_exit() {
+  # shellcheck disable=SC2064 # expanded now on purpose
+  trap "rm -rf -- $(printf %q "$1")" EXIT
+}
+
 # init_repo <dir> <name> [template]: main branch with one commit, `chore: init`.
 init_repo() {
   local dir=$1 name=$2 template=${3:-}
@@ -190,8 +197,7 @@ cmd_new() {
     if [ -e "$dest" ]; then
       echo "already exists" >&2
     else
-      # Leave nothing half-made behind.
-      trap 'rm -rf "$dest"' EXIT
+      remove_on_exit "$dest"
       init_repo "$dest" "$spec" "$template"
       trap - EXIT
     fi
@@ -206,7 +212,7 @@ cmd_new() {
   fi
   dest=$root/$spec
   [ ! -e "$dest" ] || die "$dest already exists"
-  trap 'rm -rf "$dest"' EXIT
+  remove_on_exit "$dest"
   init_repo "$dest" "${spec#*/}" "$template"
   trap - EXIT
   # The only direct push to main grove makes. gh may have created the repo before failing, so the local one stays.
