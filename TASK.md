@@ -30,13 +30,16 @@ correction comments, #49).
   without it (decision 9); the module asserts `defaultTemplates` needs `templates`.
 - `-t` keeps its early error; the default is resolved after the owner is known (after `canonical_owner`).
 - To skip the default for one repo: `GROVE_DEFAULT_TEMPLATES=` (the wrapper's `--set-default` keeps a set, empty value).
+- The module asserts owners carry no comma, `=` or whitespace, and the option's type does the same for templates;
+  `nix/checks.nix` tests both and the `templates` assertion with `builtins.tryEval`, since home-manager's `config`
+  throws on a failed assertion.
 
 ## Steps
 
-- [ ] `grove.sh`: `default_template`, `cmd_new`, usage text.
-- [ ] Tests: local and GitHub owner, `-t` replacing, unnamed owner, unset `GROVE_TEMPLATES`, malformed map, a
+- [x] `grove.sh`: `default_template`, `cmd_new`, usage text.
+- [x] Tests: local and GitHub owner, `-t` replacing, unnamed owner, unset `GROVE_TEMPLATES`, malformed map, a
       template's own `CLAUDE.md` kept.
-- [ ] `nix/module.nix`: option, wrapper variable, assertion; `nix/checks.nix`: wrapper and assertion.
-- [ ] `docs/decisions.md` entry 13 and decision 9's variable list; README; usage.
-- [ ] bats, shellcheck, `nix flake check`; an end-to-end run with real `nix flake init` and a throwaway flake.
+- [x] `nix/module.nix`: option, wrapper variable, assertion; `nix/checks.nix`: wrapper and assertion.
+- [x] `docs/decisions.md` entry 13 and decision 9's variable list; README; usage.
+- [x] bats, shellcheck, `nix flake check`; an end-to-end run with real `nix flake init` and a throwaway flake.
 - [ ] Critic, fixes, recheck; remove this file; PR saying which part of #3 grove#2 covers.

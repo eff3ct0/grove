@@ -30,6 +30,8 @@ One clone per repo, at a predictable path, with agent work in sibling worktrees.
 New repos start on `main` with one commit, `chore: init`, holding a `README.md`, an `AGENTS.md` skeleton (what it is,
 which repos it relates to, how to run it, how to test it), a `CLAUDE.md` holding only `@AGENTS.md` and a `.gitignore`.
 With `-t <template>`, `nix flake init -t $GROVE_TEMPLATES#<template>` runs first and its files win over the defaults.
+Without `-t`, `new` runs the template `GROVE_DEFAULT_TEMPLATES` names for the repo's owner (the local owner for a local
+repo), if any; an owner it does not name gets no template, and `-t` replaces the default.
 
 Repos without `origin` are first-class: `wt new` branches from the local default branch without fetching, `rm` needs
 nothing pushed (an unmerged branch is kept), and `gc` uses "merged into the local default branch".
@@ -50,6 +52,7 @@ systems without it `gc` and `publish` rely on the one-hour rule alone.
 | `GROVE_LOCAL_OWNER` | `local` | Owner directory for repos with no remote. |
 | `GROVE_DEFAULT_VISIBILITY` | `private` | `private` or `public`, for `new` and `publish`. |
 | `GROVE_TEMPLATES` | none | Flake reference for `-t`. |
+| `GROVE_DEFAULT_TEMPLATES` | none | Template `new` uses without `-t`, per owner: `<owner>=<template>` pairs separated by commas, such as `acme=base,local=base`. Owners match ignoring case. Needs `GROVE_TEMPLATES`. |
 
 ## Install
 
@@ -71,6 +74,7 @@ With Nix: `nix run <this flake> -- --help` (for example `nix run .` in a checkou
     # localOwner = "local";
     # defaultVisibility = "private";
     templates = "github:you/templates";
+    defaultTemplates.you = "base"; # grove new you/<repo> without -t runs `base`
     extraAgentsDoc = ''
       ## This machine
 
