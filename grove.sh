@@ -112,6 +112,9 @@ EOF
 
 \`<command>\`
 EOF
+  write_missing "$dir" CLAUDE.md <<'EOF'
+@AGENTS.md
+EOF
   write_missing "$dir" .gitignore <<'EOF'
 .env
 .direnv/
