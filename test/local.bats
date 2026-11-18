@@ -71,6 +71,31 @@ load helpers
   [ "$(git -C "$repo" log --format=%s)" = "chore: init" ]
 }
 
+@test "new <repo> whose template fails leaves nothing behind, so a retry creates it" {
+  nix_stub 'echo partial >devenv.nix; exit 1'
+  GROVE_TEMPLATES=/flakes/mine run "$grove" new scratch -t python
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+  [ ! -e "$GROVE_ROOT/local/scratch" ]
+  run "$grove" new scratch
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$GROVE_ROOT/local/scratch" log --format=%s)" = "chore: init" ]
+}
+
+@test "a failed new removes only its own repo when the root's path needs quoting" {
+  mkdir -p "$T/my"
+  echo keep >"$T/my/sentinel"
+  export GROVE_ROOT="$T/my root's \$HOME \"dir\""
+  mkdir -p "$GROVE_ROOT/local/other"
+  nix_stub 'exit 1'
+  GROVE_TEMPLATES=/flakes/mine run "$grove" new scratch -t python
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+  [ ! -e "$GROVE_ROOT/local/scratch" ]
+  [ -d "$GROVE_ROOT/local/other" ]
+  [ -f "$T/my/sentinel" ]
+}
+
 @test "new <repo> without -t runs the template GROVE_DEFAULT_TEMPLATES names for the local owner" {
   nix_stub 'echo "{ }" >devenv.nix'
   GROVE_TEMPLATES=/flakes/mine GROVE_DEFAULT_TEMPLATES=acme=web,local=base run "$grove" new scratch

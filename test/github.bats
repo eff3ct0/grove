@@ -122,6 +122,18 @@ load helpers
   [[ "$output" == *"$GROVE_ROOT/acme/fresh"* ]]
 }
 
+@test "new <owner>/<repo> whose template fails leaves nothing behind, here or on GitHub" {
+  nix_stub 'echo partial >devenv.nix; exit 1'
+  GROVE_TEMPLATES=/flakes/mine run "$grove" new acme/fresh -t python
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+  [ ! -e "$GROVE_ROOT/acme/fresh" ]
+  [ ! -e "$GH_STUB/repos/acme/fresh.git" ]
+  run "$grove" new acme/fresh
+  [ "$status" -eq 0 ]
+  [ "$(git --git-dir="$GH_STUB/repos/acme/fresh.git" log --format=%s main)" = "chore: init" ]
+}
+
 @test "publish works when run from inside one of the repo's worktrees" {
   repo=$(local_repo proj)
   cd "$repo"
